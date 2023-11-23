@@ -74,6 +74,13 @@ impl<V> VecPigeonhole<V> {
         }
     }
 
+    pub fn get_mut(&mut self, idx: usize) -> Option<&mut V> {
+        match &mut self.slots[idx] {
+            Slot::Free(_) => None,
+            Slot::Used(item) => Some(item),
+        }
+    }
+
     pub fn get(&self, idx: usize) -> Option<&V> {
         match &self.slots[idx] {
             Slot::Free(_) => None,
