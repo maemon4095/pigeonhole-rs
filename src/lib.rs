@@ -93,6 +93,12 @@ impl<V> VecPigeonhole<V> {
             iter: self.slots.iter(),
         }
     }
+
+    pub fn into_iter(self) -> IntoIter<V> {
+        IntoIter {
+            iter: self.slots.into_iter(),
+        }
+    }
 }
 
 pub struct Iter<'a, T>
@@ -110,5 +116,20 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.find_map(Slot::used)
+    }
+}
+
+pub struct IntoIter<T> {
+    iter: std::vec::IntoIter<Slot<T>>,
+}
+
+impl<T> Iterator for IntoIter<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.find_map(|e| match e {
+            Slot::Free(_) => None,
+            Slot::Used(v) => Some(v),
+        })
     }
 }
