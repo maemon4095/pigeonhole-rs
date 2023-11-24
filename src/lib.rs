@@ -1,8 +1,10 @@
+#[derive(Debug)]
 pub struct VecPigeonhole<V> {
     free: Option<usize>,
     slots: Vec<Slot<V>>,
 }
 
+#[derive(Debug)]
 pub enum Slot<V> {
     Free(Option<usize>),
     Used(V),
@@ -98,6 +100,12 @@ impl<V> VecPigeonhole<V> {
         IntoIter {
             iter: self.slots.into_iter(),
         }
+    }
+}
+
+impl<V> Default for VecPigeonhole<V> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
