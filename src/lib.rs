@@ -10,15 +10,6 @@ pub enum Slot<V> {
     Used(V),
 }
 
-impl<V> Slot<V> {
-    fn used(&self) -> Option<&V> {
-        match self {
-            Slot::Free(_) => None,
-            Slot::Used(v) => Some(v),
-        }
-    }
-}
-
 impl<V> VecPigeonhole<V> {
     pub fn new() -> Self {
         Self {
@@ -27,64 +18,53 @@ impl<V> VecPigeonhole<V> {
         }
     }
 
-    fn grow(&mut self) {
-        let last_len = self.slots.len();
-        let next_free_idx = last_len;
-        let free_slots = std::iter::successors(Some(Slot::Free(Some(next_free_idx + 1))), |n| {
-            let Slot::Free(Some(n)) = n else {
-                unreachable!()
-            };
-            Some(Slot::Free(Some(n + 1)))
-        })
-        .take(last_len)
-        .chain(std::iter::once(Slot::Free(None)));
-
-        self.free = Some(next_free_idx);
-        self.slots.extend(free_slots);
-    }
-
     pub fn insert(&mut self, item: V) -> usize {
         match self.free {
-            Some(idx) => {
-                let next = std::mem::replace(&mut self.slots[idx], Slot::Used(item));
+            Some(id) => {
+                let next = std::mem::replace(&mut self.slots[id], Slot::Used(item));
                 let Slot::Free(next) = next else {
                     unreachable!()
                 };
                 self.free = next;
-                idx
+                id
             }
             None => {
-                self.grow();
-                self.insert(item)
+                let id = self.slots.len();
+                self.slots.push(Slot::Used(item));
+                id
             }
         }
     }
 
-    pub fn remove(&mut self, idx: usize) -> Result<V, ()> {
-        match &self.slots[idx] {
-            Slot::Free(_) => Err(()),
-            Slot::Used(_) => {
-                let next = self.free.replace(idx);
-                let last_slot = std::mem::replace(&mut self.slots[idx], Slot::Free(next));
+    pub fn remove(&mut self, id: usize) -> Result<V, ()> {
+        let Some(entry_ref) = self.slots.get_mut(id) else {
+            return Err(());
+        };
 
-                let Slot::Used(item) = last_slot else {
-                    unreachable!()
-                };
+        let free = self.free;
+        let entry = std::mem::replace(entry_ref, Slot::Free(free));
 
+        match entry {
+            entry @ Slot::Free(_) => {
+                *entry_ref = entry;
+                Err(())
+            }
+            Slot::Used(item) => {
+                self.free = Some(id);
                 Ok(item)
             }
         }
     }
 
     pub fn get_mut(&mut self, idx: usize) -> Option<&mut V> {
-        match &mut self.slots[idx] {
+        match self.slots.get_mut(idx)? {
             Slot::Free(_) => None,
             Slot::Used(item) => Some(item),
         }
     }
 
-    pub fn get(&self, idx: usize) -> Option<&V> {
-        match &self.slots[idx] {
+    pub fn get(&self, id: usize) -> Option<&V> {
+        match self.slots.get(id)? {
             Slot::Free(_) => None,
             Slot::Used(item) => Some(item),
         }
@@ -123,7 +103,10 @@ where
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.find_map(Slot::used)
+        self.iter.find_map(|e| match e {
+            Slot::Free(_) => None,
+            Slot::Used(v) => Some(v),
+        })
     }
 }
 
