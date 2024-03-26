@@ -1,16 +1,16 @@
 #[derive(Debug)]
-pub struct VecPigeonhole<V> {
+pub struct VecPigeonhole<T> {
     free: Option<usize>,
-    slots: Vec<Slot<V>>,
+    slots: Vec<Slot<T>>,
 }
 
 #[derive(Debug)]
-pub enum Slot<V> {
+pub enum Slot<T> {
     Free(Option<usize>),
-    Used(V),
+    Used(T),
 }
 
-impl<V> VecPigeonhole<V> {
+impl<T> VecPigeonhole<T> {
     pub fn new() -> Self {
         Self {
             free: None,
@@ -18,7 +18,31 @@ impl<V> VecPigeonhole<V> {
         }
     }
 
-    pub fn insert(&mut self, item: V) -> usize {
+    pub fn reserve(&mut self) -> Reservation<'_, T> {
+        match self.free {
+            Some(id) => {
+                let next = std::mem::replace(&mut self.slots[id], Slot::Free(None));
+                let Slot::Free(next) = next else {
+                    unreachable!()
+                };
+                self.free = next;
+                Reservation {
+                    pigeonhole: self,
+                    id,
+                }
+            }
+            None => {
+                let id = self.slots.len();
+                self.slots.push(Slot::Free(None));
+                Reservation {
+                    pigeonhole: self,
+                    id,
+                }
+            }
+        }
+    }
+
+    pub fn insert(&mut self, item: T) -> usize {
         match self.free {
             Some(id) => {
                 let next = std::mem::replace(&mut self.slots[id], Slot::Used(item));
@@ -36,7 +60,7 @@ impl<V> VecPigeonhole<V> {
         }
     }
 
-    pub fn remove(&mut self, id: usize) -> Result<V, ()> {
+    pub fn remove(&mut self, id: usize) -> Result<T, ()> {
         let Some(entry_ref) = self.slots.get_mut(id) else {
             return Err(());
         };
@@ -56,27 +80,27 @@ impl<V> VecPigeonhole<V> {
         }
     }
 
-    pub fn get_mut(&mut self, idx: usize) -> Option<&mut V> {
+    pub fn get_mut(&mut self, idx: usize) -> Option<&mut T> {
         match self.slots.get_mut(idx)? {
             Slot::Free(_) => None,
             Slot::Used(item) => Some(item),
         }
     }
 
-    pub fn get(&self, id: usize) -> Option<&V> {
+    pub fn get(&self, id: usize) -> Option<&T> {
         match self.slots.get(id)? {
             Slot::Free(_) => None,
             Slot::Used(item) => Some(item),
         }
     }
 
-    pub fn iter(&self) -> Iter<'_, V> {
+    pub fn iter(&self) -> Iter<'_, T> {
         Iter {
             iter: self.slots.iter(),
         }
     }
 
-    pub fn into_iter(self) -> IntoIter<V> {
+    pub fn into_iter(self) -> IntoIter<T> {
         IntoIter {
             iter: self.slots.into_iter(),
         }
@@ -86,6 +110,30 @@ impl<V> VecPigeonhole<V> {
 impl<V> Default for VecPigeonhole<V> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+pub struct Reservation<'a, T> {
+    pigeonhole: &'a mut VecPigeonhole<T>,
+    id: usize,
+}
+
+impl<'a, T> Reservation<'a, T> {
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    pub fn set(self, value: T) {
+        let slot = &mut self.pigeonhole.slots[self.id];
+        *slot = Slot::Used(value);
+        std::mem::forget(self);
+    }
+}
+
+impl<'a, T> Drop for Reservation<'a, T> {
+    fn drop(&mut self) {
+        self.pigeonhole.slots[self.id] = Slot::Free(self.pigeonhole.free);
+        self.pigeonhole.free = Some(self.id);
     }
 }
 
