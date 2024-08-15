@@ -65,6 +65,14 @@ impl<T> VecPigeonhole<T> {
     }
 
     pub fn remove_if(&mut self, id: usize, filter: impl FnOnce(&T) -> bool) -> Option<T> {
+        self.remove_map(id, |v| if filter(&v) { Ok(v) } else { Err(v) })
+    }
+
+    pub fn remove_map<U>(
+        &mut self,
+        id: usize,
+        filter: impl FnOnce(T) -> Result<U, T>,
+    ) -> Option<U> {
         let Some(entry_ref) = self.slots.get_mut(id) else {
             return None;
         };
@@ -77,15 +85,16 @@ impl<T> VecPigeonhole<T> {
                 *entry_ref = entry;
                 None
             }
-            Slot::Used(item) => {
-                if filter(&item) {
+            Slot::Used(item) => match filter(item) {
+                Ok(v) => {
                     self.free = Some(id);
-                    Some(item)
-                } else {
-                    *entry_ref = Slot::Used(item);
+                    Some(v)
+                }
+                Err(v) => {
+                    *entry_ref = Slot::Used(v);
                     None
                 }
-            }
+            },
         }
     }
 
